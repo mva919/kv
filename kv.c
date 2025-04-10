@@ -1,6 +1,8 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/_types/_u_int8_t.h>
 #include <sys/types.h>
 
 #define MAX_ARG_LEN 40
@@ -13,106 +15,130 @@ struct kv_command {
   char *value;
 };
 
+int parse_key_command(char *str, struct kv_command *command) {
+  u_int8_t i;
+  for (i = 0; str[i] != '\0'; i++) {
+    if (str[i] == ',') {
+      return -1;
+    }
+  }
+  if (i == 0) {
+    return -1;
+  }
+
+  command->key = malloc(i + 1);
+  if (command->key == NULL) {
+    return -1;
+  }
+  strncpy(command->key, str, i + 1);
+
+  return 0;
+}
+
+int parse_key_val_command(char *str, struct kv_command *command) {
+  u_int8_t comma_i, i;
+  bool seen_comma = false;
+  for (i = 0; str[i] != '\0'; i++) {
+    if (str[i] == ',') {
+      if (seen_comma) {
+        return -1;
+      }
+      seen_comma = true;
+      comma_i = i;
+    }
+  }
+
+  if (!seen_comma || comma_i + 1 == i) {
+    return -1;
+  }
+
+  command->key = malloc(comma_i + 1);
+  if (command->key == NULL) {
+    return -1;
+  }
+  strncpy(command->key, str, comma_i);
+
+  command->value = malloc(i - comma_i + 1);
+  if (command->value == NULL) {
+    return -1;
+  }
+  strncpy(command->value, str + comma_i + 1, i - comma_i + 1);
+
+  return 0;
+}
+
 int main(int argc, char **argv) {
   struct kv_command *command_list[argc - 1];
+  uint command_list_size = 0;
 
-  for (int i = 1; i < argc; i++) {
-    char command = argv[i][0];
+  for (int arg_i = 1; arg_i < argc; arg_i++) {
+    char command = argv[arg_i][0];
     struct kv_command *curr_command = malloc(sizeof(struct kv_command));
 
     switch (command) {
     case 'p':
-      curr_command->command = put;
+      curr_command->command = put; // kev, value
       break;
     case 'g':
-      curr_command->command = get;
+      curr_command->command = get; // key
       break;
     case 'd':
-      curr_command->command = delete;
+      curr_command->command = delete; // key
       break;
     case 'c':
-      curr_command->command = clear;
+      curr_command->command = clear; // no value
       break;
     case 'a':
-      curr_command->command = all;
+      curr_command->command = all; // no value
       break;
     default:
-      fprintf(stderr, "Error: invalid operation %d:'%s'.\n", i, argv[i]);
+      fprintf(stderr, "Error: invalid operation %d:'%s'.\n", arg_i,
+              argv[arg_i]);
       free(curr_command);
       continue;
     }
 
-    if (argv[i][1] != ',') {
-      fprintf(stderr, "Error: invalid query syntax %d:'%s'.\n", i, argv[i]);
+    if ((curr_command->command == all || curr_command->command == clear) &&
+        argv[arg_i][1] != '\0') {
+      fprintf(stderr, "Error: invalid query syntax %d:'%s'.\n", arg_i,
+              argv[arg_i]);
+      free(curr_command);
+      continue;
+    }
+    if ((curr_command->command != all && curr_command->command != clear) &&
+        argv[arg_i][1] != ',') {
+      fprintf(stderr, "Error: invalid query syntax %d:'%s'.\n", arg_i,
+              argv[arg_i]);
       free(curr_command);
       continue;
     }
 
-    u_int8_t ptr = 2;
-    while (argv[i][ptr] != '\0' && argv[i][ptr] != ',') {
+    u_int8_t char_i = 2;
 
-      if (ptr == MAX_ARG_LEN) {
-        fprintf(stderr,
-                "Error: query %d value string is longer than 40 characters.\n",
-                i);
+    if (curr_command->command == put) {
+      if (parse_key_val_command(argv[arg_i] + 2, curr_command) == -1) {
+        fprintf(stderr, "Error: invalid put query syntax %d:'%s'.\n", arg_i,
+                argv[arg_i]);
         free(curr_command);
         continue;
       }
-      ptr++;
-    }
-
-    if (argv[i][ptr] == ',') {
-      if (curr_command->command == put) {
-        argv[i][ptr] = '\0';
-      }
-    }
-
-    u_int8_t str_len = ptr - 1;
-
-    curr_command->key = malloc(str_len);
-    if (curr_command->key == NULL) {
-      fprintf(stderr,
-              "Error: something went wrong while processing command.\n");
-      free(curr_command);
-      continue;
-    }
-
-    strncpy(curr_command->key, argv[i] + 2, str_len);
-
-    if (curr_command->command == put) {
-
-      if (argv[i][+ptr] != ',') {
-        printf("%c\n", argv[i][ptr]);
-        fprintf(stderr, "Error: invalid put query syntax '%s'.\n", argv[i]);
+    } else {
+      if (parse_key_command(argv[arg_i] + 2, curr_command) == -1) {
+        fprintf(stderr, "Error: invalid query syntax %d:'%s'.\n", arg_i,
+                argv[arg_i]);
+        free(curr_command);
         continue;
       }
-      u_int8_t initial_ptr_idx = ptr;
-      while (argv[i][ptr] != '\0') {
-        if (argv[i][ptr] == ',') {
-          fprintf(stderr, "Error: invalid use of comma charcter %d: '%s'.\n", i,
-                  argv[i]);
-          free(curr_command);
-          continue;
-        }
-        if (ptr == MAX_ARG_LEN) {
-          fprintf(stderr,
-                  "Error: value string is longer than 40 characters.\n");
-          continue;
-        }
-        ptr++;
-      }
-      str_len = ptr - initial_ptr_idx;
-      strncpy(curr_command->value, argv[i] + initial_ptr_idx, str_len);
-      printf("%s\n", curr_command->value);
     }
 
-    printf("%s\n", curr_command->key);
-    command_list[i - 1] = curr_command;
+    command_list[command_list_size++] = curr_command;
   }
 
-  // for (int i = 0; i < argc - 1; i++) {
-  //   printf("%d, %s\n", command_list[i]->command, command_list[i]->key);
-  // }
+  printf("Parsed commands\n");
+  for (uint i = 0; i < command_list_size; i++) {
+    printf("Command: %d: %s, %s\n", command_list[i]->command,
+           command_list[i]->key, command_list[i]->value);
+  }
 
   return 0;
 }
