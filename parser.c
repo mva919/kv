@@ -76,7 +76,7 @@ int parse_arguments(int argc, char **argv, struct kv_command **command_list) {
       curr_command->command = get; // key
       break;
     case 'd':
-      curr_command->command = delete; // key
+      curr_command->command = del; // key
       break;
     case 'c':
       curr_command->command = clear; // no value

@@ -1,7 +1,7 @@
 #ifndef PARSER_H
 #define PARSER_H
 
-typedef enum { put = 0, get = 1, delete = 2, clear = 3, all = 4 } command_type;
+typedef enum { put = 0, get = 1, del = 2, clear = 3, all = 4 } command_type;
 
 struct kv_command {
   command_type command;
